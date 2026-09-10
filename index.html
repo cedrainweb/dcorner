@@ -1,30 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-(function() {
-    const ua = navigator.userAgent || navigator.vendor || window.opera;
-    const isFacebook = (ua.indexOf("FBAN") > -1) || (ua.indexOf("FBAV") > -1);
-
-    if (isFacebook) {
-        const currentUrl = window.location.href;
-
-        // 1. Android Fix: Use Android Intents to force open Chrome
-        if (/Android/i.test(ua)) {
-            // Strips the protocol (http/https) and formats as an intent
-            const cleanUrl = currentUrl.replace(/^https?:\/\//, '');
-            window.location.href = `intent://${cleanUrl}#Intent;scheme=https;package=com.android.chrome;end`;
-        } 
-        
-        // 2. iOS Fix: Force a file download type to crash the WebView into Safari
-        else if (/iPhone|iPad|iPod/i.test(ua)) {
-            // Append a dummy query parameter that forces an unknown file stream
-            // This causes iOS to open Safari to handle the "download"
-            if (!currentUrl.includes('openInSafari=1')) {
-                const separator = currentUrl.includes('?') ? '&' : '?';
-                window.location.href = currentUrl + separator + 'openInSafari=1';
-            }
-        }
-    }
-})();  
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
