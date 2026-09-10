@@ -6,6 +6,11 @@
 
   <title>D'Corner Pickleball Court Official Website</title>
 
+  <!-- Favicon (added once logo is provided) -->
+  <link rel="icon" type="image/png" href="favicon-32x32.png" sizes="32x32">
+  <link rel="icon" type="image/png" href="favicon-16x16.png" sizes="16x16">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
   <style>
     * {
       box-sizing: border-box;
@@ -16,21 +21,28 @@
       margin: 0;
       padding: 0;
       width: 100%;
-      height: 100%;
-      overflow: hidden;
+      /* NOTE: overflow was previously "hidden" here, which is what made
+         the very bottom of the page unreachable — the iframe was fixed
+         to 100vh with no internal scrolling, and the outer page (this
+         file) wasn't allowed to scroll either, so anything below one
+         screen's worth of content had nowhere to go. Removed so this
+         page can scroll normally once the iframe below is resized to
+         match its real content height. */
     }
 
     .iframe-container {
       width: 100%;
-      height: 100vh;
       position: relative;
-      overflow: hidden;
     }
 
     iframe {
       display: block;
       width: 100%;
-      height: 100%;
+      /* Starting height only — the script below resizes this to match
+         the embedded app's actual content height as soon as it loads
+         and whenever its content changes (switching Home/FAQ/Contact,
+         opening an FAQ item, dismissing a banner, etc). */
+      height: 100vh;
       border: none;
     }
   </style>
@@ -40,12 +52,51 @@
 
   <div class="iframe-container">
     <iframe
+      id="dcFrame"
       src="https://script.google.com/macros/s/AKfycbw9PPEo_IqOH6U65MXYjQQ90rcMA59E5o5WKWBNd78e7pUudKmB16JK998o_oXaf6hM/exec"
       title="D'Corner Pickleball Court Official Website"
       allow="fullscreen"
       loading="eager">
     </iframe>
   </div>
+
+  <script>
+    // Cross-frame sync with the embedded D'Corner app (Index.html).
+    // That page posts its real content height so this iframe can be
+    // resized to fit — letting THIS page's native scroll do the work
+    // instead of relying on scrolling inside the iframe. It also asks
+    // this page to scroll to top on request (e.g. the app's back-to-top
+    // button, or switching between its Home/FAQ/Contact tabs), and
+    // listens for this page's own scroll position so the app's
+    // back-to-top button knows when to show itself.
+    (function () {
+      var frame = document.getElementById('dcFrame');
+
+      window.addEventListener('message', function (e) {
+        if (!e.data || typeof e.data !== 'object') return;
+
+        if (e.data.type === 'dcorner-resize' && typeof e.data.height === 'number') {
+          frame.style.height = e.data.height + 'px';
+        }
+
+        if (e.data.type === 'dcorner-scrollToTop') {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      });
+
+      var scrollTicking = false;
+      window.addEventListener('scroll', function () {
+        if (scrollTicking) return;
+        scrollTicking = true;
+        requestAnimationFrame(function () {
+          scrollTicking = false;
+          try {
+            frame.contentWindow.postMessage({ type: 'dcorner-scroll', y: window.scrollY }, '*');
+          } catch (e) {}
+        });
+      }, { passive: true });
+    })();
+  </script>
 
 </body>
 </html>
