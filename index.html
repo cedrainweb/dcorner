@@ -49,7 +49,88 @@
 </head>
 
 <body>
+<!-- ================================================================= -->
+<!-- FACEBOOK IN-APP BROWSER BREAKOUT SYSTEM                           -->
+<!-- ================================================================= -->
 
+<!-- 1. The Visual Fallback Overlay UI -->
+<div id="fb-browser-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.98); z-index: 999999; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-align: center; padding: 40px 20px; box-sizing: border-box;">
+    <div style="max-width: 400px; margin: 0 auto; top: 45%; position: relative; transform: translateY(-50%);">
+        
+        <!-- App-Specific Instructions Icon/Animation placeholder -->
+        <div style="font-size: 64px; margin-bottom: 20px;">🌐</div>
+        
+        <h2 style="color: #1a1a1a; font-size: 22px; font-weight: 700; margin-bottom: 12px; line-height: 1.3;">
+            Please Open This Link in a Regular Browser
+        </h2>
+        
+        <p style="color: #666; font-size: 15px; line-height: 1.5; margin-bottom: 30px;">
+            To ensure secure payments, downloads, and optimal performance, please open this page in your native web browser.
+        </p>
+        
+        <!-- Platform Specific Dynamic Instructions Block -->
+        <div id="fb-instructions-ios" style="display: none; background: #f0f2f5; padding: 20px; border-radius: 12px; border: 1px solid #e4e6eb;">
+            <p style="margin: 0; font-size: 14px; color: #333; font-weight: 600;">
+                1. Tap the three dots (<strong style="font-size: 18px;">···</strong>) at the top right.<br><br>
+                2. Select <span style="color: #007aff; font-weight: bold;">"Open in browser"</span> or <span style="color: #007aff; font-weight: bold;">"Open in Safari"</span>.
+            </p>
+        </div>
+
+        <div id="fb-instructions-android" style="display: none; background: #f0f2f5; padding: 20px; border-radius: 12px; border: 1px solid #e4e6eb;">
+            <p style="margin: 0; font-size: 14px; color: #333; font-weight: 600;">
+                1. Tap the menu dots (<strong style="font-size: 18px;">⋮</strong>) at the top right.<br><br>
+                2. Tap <span style="color: #4285f4; font-weight: bold;">"Open in Chrome"</span> or <span style="color: #4285f4; font-weight: bold;">"Open in Browser"</span>.
+            </p>
+        </div>
+        
+    </div>
+</div>
+
+<!-- 2. The Execution Engine -->
+<script type="text/javascript">
+(function() {
+    // Detect environment
+    const ua = navigator.userAgent || navigator.vendor || window.opera;
+    const isFacebook = (ua.indexOf("FBAN") > -1) || (ua.indexOf("FBAV") > -1);
+
+    if (isFacebook) {
+        const currentUrl = window.location.href;
+        const isAndroid = /Android/i.test(ua);
+        const isIOS = /iPhone|iPad|iPod/i.test(ua);
+
+        // --- STEP A: AUTOMATED BREAKOUT ATTEMPTS ---
+        
+        if (isAndroid) {
+            // Force Android Intent to standard Google Chrome browser package
+            const cleanUrl = currentUrl.replace(/^https?:\/\//, '');
+            window.location.href = `intent://${cleanUrl}#Intent;scheme=https;package=com.android.chrome;end`;
+        } 
+        else if (isIOS) {
+            // Append stream parameters triggering iOS file handler engine to pull to Safari
+            if (!currentUrl.includes('openInSafari=1')) {
+                const separator = currentUrl.includes('?') ? '&' : '?';
+                window.location.href = currentUrl + separator + 'openInSafari=1';
+            }
+        }
+
+        // --- STEP B: FALLBACK UI TRIGGER ---
+        // If automated redirects fail or browser refuses to navigate out, block page interaction with the visual guide
+        document.addEventListener("DOMContentLoaded", function() {
+            const overlay = document.getElementById('fb-browser-overlay');
+            if (overlay) {
+                overlay.style.display = 'block';
+                
+                // Show platform specific contextual instructions
+                if (isIOS) {
+                    document.getElementById('fb-instructions-ios').style.display = 'block';
+                } else if (isAndroid) {
+                    document.getElementById('fb-instructions-android').style.display = 'block';
+                }
+            }
+        });
+    }
+})();
+</script>
   <div class="iframe-container">
     <iframe
       id="dcFrame"
