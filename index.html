@@ -160,23 +160,29 @@
     // back-to-top button knows when to show itself.
     (function () {
       var frame = document.getElementById('dcFrame');
-
+ 
       window.addEventListener('message', function (e) {
         if (!e.data || typeof e.data !== 'object') return;
-
+ 
         if (e.data.type === 'dcorner-resize' && typeof e.data.height === 'number') {
           frame.style.height = e.data.height + 'px';
         }
-
+ 
         if (e.data.type === 'dcorner-scrollToTop') {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }
-
+ 
         if (e.data.type === 'dcorner-scrollTo' && typeof e.data.y === 'number') {
           window.scrollTo({ top: e.data.y, behavior: 'smooth' });
         }
       });
-
+ 
+      function sendViewport() {
+        try { frame.contentWindow.postMessage({ type: 'dcorner-scroll', y: window.scrollY, h: window.innerHeight }, '*'); } catch (e) {}
+      }
+      frame.addEventListener('load', sendViewport);
+      window.addEventListener('resize', sendViewport, { passive: true });
+ 
       var scrollTicking = false;
       window.addEventListener('scroll', function () {
         if (scrollTicking) return;
@@ -184,7 +190,7 @@
         requestAnimationFrame(function () {
           scrollTicking = false;
           try {
-            frame.contentWindow.postMessage({ type: 'dcorner-scroll', y: window.scrollY }, '*');
+            frame.contentWindow.postMessage({ type: 'dcorner-scroll', y: window.scrollY, h: window.innerHeight }, '*');
           } catch (e) {}
         });
       }, { passive: true });
