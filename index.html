@@ -50,7 +50,11 @@
          the embedded app's actual content height as soon as it loads
          and whenever its content changes (switching Home/FAQ/Contact,
          opening an FAQ item, dismissing a banner, etc). */
+      /* dvh = the height you can actually see (excludes the phone browser's
+         address bar). Plain 100vh is taller than the visible screen on mobile
+         Chrome/Safari, which pushed the app's bottom-pinned total bar off-screen. */
       height: 100vh;
+      height: 100dvh;
       border: none;
     }
 
@@ -188,6 +192,16 @@
     // back-to-top button knows when to show itself.
     (function () {
       var frame = document.getElementById('dcFrame');
+      // Keep the frame exactly as tall as the visible screen (also on browsers
+      // without dvh support) until/unless the app asks for a taller size.
+      var appResized = false;
+      function fitFrame() {
+        if (appResized) return;
+        frame.style.height = window.innerHeight + 'px';
+      }
+      fitFrame();
+      window.addEventListener('resize', fitFrame, { passive: true });
+      window.addEventListener('orientationchange', function () { setTimeout(fitFrame, 200); });
  
       // ---- Floating total (state is pushed by the app; show/hide is decided
       // here on every scroll, so it appears instantly and never lags). ----
@@ -241,6 +255,7 @@
         if (!e.data || typeof e.data !== 'object') return;
  
         if (e.data.type === 'dcorner-resize' && typeof e.data.height === 'number') {
+          appResized = true;
           frame.style.height = e.data.height + 'px';
         }
  
