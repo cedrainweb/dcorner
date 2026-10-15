@@ -177,151 +177,91 @@
     <span class="r"><small id="pbLabel">Total</small><s id="pbOrig" hidden></s><b id="pbTotal"></b></span>
   </button>
 
-<script>
-  // Cross-frame sync with the embedded D'Corner app (Index.html).
-  // Improves reliability by requesting state on load, retrying, and logging.
-  (function () {
-    var frame = document.getElementById('dcFrame');
-
-    // ---- Floating total (state is pushed by the app; show/hide is decided
-    // here on every scroll, so it appears instantly and never lags). ----
-    var pbar = document.getElementById('pbar');
-    var pb = { active: false, startY: 0, endY: 999999, view: null };
-    function renderBar() {
-      var v = pb.view || {};
-      var y = window.scrollY || 0, h = window.innerHeight || 0;
-      var show = pb.active && y >= pb.startY && (y + h) < pb.endY;
-      if (show) {
-        document.getElementById('pbCount').textContent = v.count || '';
-        document.getElementById('pbLabel').textContent = v.label || 'Total';
-        document.getElementById('pbTotal').textContent = v.total || '';
-        var b = document.getElementById('pbBadge'); b.hidden = !v.badge; b.textContent = v.badge || '';
-        var o = document.getElementById('pbOrig'); o.hidden = !v.original; o.textContent = v.original || '';
-      }
-      pbar.classList.toggle('show', !!show);
-    }
-    pbar.addEventListener('click', function () {
-      try { frame.contentWindow.postMessage({ type: 'dcorner-pricebar-click' }, '*'); } catch (e) { console.warn('postMessage dcorner-pricebar-click failed', e); }
-    });
-
-    // Track whether we've received a pricebar/state update yet
-    var receivedPricebar = false;
-
-    // Single message handler that logs incoming messages for debugging
-    window.addEventListener('message', function (e) {
-      // Debug: always log incoming messages (remove or reduce verbosity in production)
-      try {
-        console.log('[parent] received message', e && e.data && e.data.type, e.data);
-      } catch (err) {
-        // ignore logging errors in very old browsers
-      }
-      if (!e.data || typeof e.data !== 'object') return;
-
-      // Price bar state
-      if (e.data.type === 'dcorner-pricebar') {
-        receivedPricebar = true;
-        pb.active = !!e.data.active;
-        pb.startY = Number(e.data.startY) || 0;
-        pb.endY = Number(e.data.endY) || 999999;
-        pb.view = e.data.view || null;
-        renderBar();
-        return;
-      }
-
-      // iframe -> parent resize and scroll requests
-      if (e.data.type === 'dcorner-resize' && typeof e.data.height === 'number') {
-        try {
-          frame.style.height = e.data.height + 'px';
-          console.log('[parent] resized iframe to', e.data.height);
-        } catch (err) {
-          console.warn('[parent] iframe resize failed', err);
+  <script>
+    // Cross-frame sync with the embedded D'Corner app (Index.html).
+    // That page posts its real content height so this iframe can be
+    // resized to fit — letting THIS page's native scroll do the work
+    // instead of relying on scrolling inside the iframe. It also asks
+    // this page to scroll to top on request (e.g. the app's back-to-top
+    // button, or switching between its Home/FAQ/Contact tabs), and
+    // listens for this page's own scroll position so the app's
+    // back-to-top button knows when to show itself.
+    (function () {
+      var frame = document.getElementById('dcFrame');
+ 
+      // ---- Floating total (state is pushed by the app; show/hide is decided
+      // here on every scroll, so it appears instantly and never lags). ----
+      var pbar = document.getElementById('pbar');
+      var pb = { active: false, startY: 0, endY: 999999, view: null };
+      function renderBar() {
+        var v = pb.view || {};
+        var y = window.scrollY || 0, h = window.innerHeight || 0;
+        var show = pb.active && y >= pb.startY && (y + h) < pb.endY;
+        if (show) {
+          document.getElementById('pbCount').textContent = v.count || '';
+          document.getElementById('pbLabel').textContent = v.label || 'Total';
+          document.getElementById('pbTotal').textContent = v.total || '';
+          var b = document.getElementById('pbBadge'); b.hidden = !v.badge; b.textContent = v.badge || '';
+          var o = document.getElementById('pbOrig'); o.hidden = !v.original; o.textContent = v.original || '';
         }
+        pbar.classList.toggle('show', !!show);
       }
-
-      if (e.data.type === 'dcorner-scrollToTop') {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-
-      if (e.data.type === 'dcorner-scrollTo' && typeof e.data.y === 'number') {
-        window.scrollTo({ top: e.data.y, behavior: 'smooth' });
-      }
-    });
-
-    function sendViewport() {
-      try {
-        frame.contentWindow.postMessage({ type: 'dcorner-scroll', y: window.scrollY, h: window.innerHeight, bar: true }, '*');
-        console.log('[parent] sent dcorner-scroll', { y: window.scrollY, h: window.innerHeight });
-      } catch (e) {
-        console.warn('[parent] sendViewport postMessage failed', e);
-      }
-    }
-
-    // When the iframe loads, ask it for its state and retry a few times.
-    frame.addEventListener('load', function () {
-      console.log('[parent] iframe load event');
-      // Initial broadcast
-      sendViewport();
-
-      // Ask iframe to post its current state immediately (app should reply with dcorner-pricebar)
-      try {
-        frame.contentWindow.postMessage({ type: 'dcorner-request-state' }, '*');
-        console.log('[parent] posted dcorner-request-state');
-      } catch (e) {
-        console.warn('[parent] postMessage dcorner-request-state failed', e);
-      }
-
-      // Retry logic: a couple of scheduled attempts to re-send viewport and request-state
-      setTimeout(function () { sendViewport(); }, 200);
-      setTimeout(function () {
-        try { frame.contentWindow.postMessage({ type: 'dcorner-request-state' }, '*'); } catch (e) {}
-        sendViewport();
-      }, 600);
-
-      // Short polling fallback: ping the child every 200ms for up to 3s until we get a dcorner-pricebar
-      var tries = 0;
-      var maxTries = 15; // ~3 seconds (15 * 200ms)
-      var pollInterval = setInterval(function () {
-        if (receivedPricebar || tries >= maxTries) {
-          clearInterval(pollInterval);
-          if (!receivedPricebar) {
-            console.warn('[parent] did not receive dcorner-pricebar after polling; giving up for now');
-          } else {
-            console.log('[parent] received dcorner-pricebar; stopping poll');
-          }
-          return;
-        }
-        tries++;
-        try {
-          frame.contentWindow.postMessage({ type: 'dcorner-request-state' }, '*');
-          sendViewport();
-          console.log('[parent] poll request-state attempt', tries);
-        } catch (e) {
-          console.warn('[parent] poll postMessage failed', e);
-        }
-      }, 200);
-    });
-
-    // send initial viewport immediately in case iframe is already loaded
-    // (covers the case where script runs after iframe load)
-    setTimeout(function () { try { sendViewport(); } catch (e) {} }, 50);
-
-    // Keep parent -> child scroll messages in sync on resize and scroll
-    window.addEventListener('resize', function () { sendViewport(); renderBar(); }, { passive: true });
-
-    var scrollTicking = false;
-    window.addEventListener('scroll', function () {
-      renderBar();
-      if (scrollTicking) return;
-      scrollTicking = true;
-      requestAnimationFrame(function () {
-        scrollTicking = false;
-        try {
-          frame.contentWindow.postMessage({ type: 'dcorner-scroll', y: window.scrollY, h: window.innerHeight, bar: true }, '*');
-        } catch (e) {}
+      pbar.addEventListener('click', function () {
+        try { frame.contentWindow.postMessage({ type: 'dcorner-pricebar-click' }, '*'); } catch (e) {}
       });
-    }, { passive: true });
-  })();
-</script>
+
+      window.addEventListener('message', function (e) {
+        if (!e.data || typeof e.data !== 'object') return;
+        if (e.data.type === 'dcorner-hello') { sendViewport(); }
+        if (e.data.type === 'dcorner-pricebar') {
+          pb.active = !!e.data.active;
+          pb.startY = Number(e.data.startY) || 0;
+          pb.endY = Number(e.data.endY) || 999999;
+          pb.view = e.data.view || null;
+          renderBar();
+        }
+      });
+
+      window.addEventListener('message', function (e) {
+        if (!e.data || typeof e.data !== 'object') return;
+ 
+        if (e.data.type === 'dcorner-resize' && typeof e.data.height === 'number') {
+          frame.style.height = e.data.height + 'px';
+        }
+ 
+        if (e.data.type === 'dcorner-scrollToTop') {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+ 
+        if (e.data.type === 'dcorner-scrollTo' && typeof e.data.y === 'number') {
+          window.scrollTo({ top: e.data.y, behavior: 'smooth' });
+        }
+      });
+ 
+      function sendViewport() {
+        try { frame.contentWindow.postMessage({ type: 'dcorner-scroll', y: window.scrollY, h: window.innerHeight, bar: true }, '*'); } catch (e) {}
+      }
+      frame.addEventListener('load', sendViewport);
+      // The embedded app may not be ready when the frame 'load' fires, so keep
+      // announcing the screen size / bar support for the first few seconds.
+      var announce = 0;
+      var announceTimer = setInterval(function () { sendViewport(); if (++announce > 20) clearInterval(announceTimer); }, 700);
+      window.addEventListener('resize', function () { sendViewport(); renderBar(); }, { passive: true });
+ 
+      var scrollTicking = false;
+      window.addEventListener('scroll', function () {
+        renderBar();
+        if (scrollTicking) return;
+        scrollTicking = true;
+        requestAnimationFrame(function () {
+          scrollTicking = false;
+          try {
+            frame.contentWindow.postMessage({ type: 'dcorner-scroll', y: window.scrollY, h: window.innerHeight, bar: true }, '*');
+          } catch (e) {}
+        });
+      }, { passive: true });
+    })();
+  </script>
 
 </body>
 </html>
