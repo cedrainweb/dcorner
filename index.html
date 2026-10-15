@@ -53,6 +53,29 @@
       height: 100vh;
       border: none;
     }
+
+    /* Floating total — drawn by THIS page so it is truly fixed to the
+       device screen (the app's iframe is as tall as the whole page). */
+    #pbar {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 2147483000;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      width: 100%; border: 0; margin: 0; background: #062f64; color: #fff;
+      padding: 9px 16px calc(9px + env(safe-area-inset-bottom, 0px));
+      font: 14px/1.2 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; text-align: left; cursor: pointer;
+      box-shadow: 0 -6px 22px rgba(6,47,100,.28);
+      opacity: 0; visibility: hidden; transform: translateY(14px);
+      transition: opacity .15s ease, transform .15s ease, visibility .15s ease;
+    }
+    #pbar.show { opacity: 1; visibility: visible; transform: translateY(0); }
+    #pbar .l { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+    #pbar .c { font-size: 11.5px; font-weight: 700; color: rgba(255,255,255,.85); }
+    #pbar .b { display: inline-block; background: #75d31d; color: #0b2a05; font-size: 9.5px; font-weight: 800; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+    #pbar .r { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
+    #pbar .r small { font-size: 9.5px; font-weight: 700; color: rgba(255,255,255,.7); text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+    #pbar .r s { font-size: 10.5px; font-weight: 600; color: rgba(255,255,255,.6); }
+    #pbar .r b { font-size: 15.5px; }
+    #pbar [hidden] { display: none; }
+    @media (min-width: 1000px) { #pbar { display: none !important; } }
   </style>
 </head>
 
@@ -149,6 +172,11 @@
     </iframe>
   </div>
 
+  <button id="pbar" type="button" aria-label="View booking summary">
+    <span class="l"><span class="c" id="pbCount"></span><span class="b" id="pbBadge" hidden></span></span>
+    <span class="r"><small id="pbLabel">Total</small><s id="pbOrig" hidden></s><b id="pbTotal"></b></span>
+  </button>
+
   <script>
     // Cross-frame sync with the embedded D'Corner app (Index.html).
     // That page posts its real content height so this iframe can be
@@ -161,6 +189,38 @@
     (function () {
       var frame = document.getElementById('dcFrame');
  
+      // ---- Floating total (state is pushed by the app; show/hide is decided
+      // here on every scroll, so it appears instantly and never lags). ----
+      var pbar = document.getElementById('pbar');
+      var pb = { active: false, startY: 0, endY: 999999, view: null };
+      function renderBar() {
+        var v = pb.view || {};
+        var y = window.scrollY || 0, h = window.innerHeight || 0;
+        var show = pb.active && y >= pb.startY && (y + h) < pb.endY;
+        if (show) {
+          document.getElementById('pbCount').textContent = v.count || '';
+          document.getElementById('pbLabel').textContent = v.label || 'Total';
+          document.getElementById('pbTotal').textContent = v.total || '';
+          var b = document.getElementById('pbBadge'); b.hidden = !v.badge; b.textContent = v.badge || '';
+          var o = document.getElementById('pbOrig'); o.hidden = !v.original; o.textContent = v.original || '';
+        }
+        pbar.classList.toggle('show', !!show);
+      }
+      pbar.addEventListener('click', function () {
+        try { frame.contentWindow.postMessage({ type: 'dcorner-pricebar-click' }, '*'); } catch (e) {}
+      });
+
+      window.addEventListener('message', function (e) {
+        if (!e.data || typeof e.data !== 'object') return;
+        if (e.data.type === 'dcorner-pricebar') {
+          pb.active = !!e.data.active;
+          pb.startY = Number(e.data.startY) || 0;
+          pb.endY = Number(e.data.endY) || 999999;
+          pb.view = e.data.view || null;
+          renderBar();
+        }
+      });
+
       window.addEventListener('message', function (e) {
         if (!e.data || typeof e.data !== 'object') return;
  
@@ -178,19 +238,20 @@
       });
  
       function sendViewport() {
-        try { frame.contentWindow.postMessage({ type: 'dcorner-scroll', y: window.scrollY, h: window.innerHeight }, '*'); } catch (e) {}
+        try { frame.contentWindow.postMessage({ type: 'dcorner-scroll', y: window.scrollY, h: window.innerHeight, bar: true }, '*'); } catch (e) {}
       }
       frame.addEventListener('load', sendViewport);
-      window.addEventListener('resize', sendViewport, { passive: true });
+      window.addEventListener('resize', function () { sendViewport(); renderBar(); }, { passive: true });
  
       var scrollTicking = false;
       window.addEventListener('scroll', function () {
+        renderBar();
         if (scrollTicking) return;
         scrollTicking = true;
         requestAnimationFrame(function () {
           scrollTicking = false;
           try {
-            frame.contentWindow.postMessage({ type: 'dcorner-scroll', y: window.scrollY, h: window.innerHeight }, '*');
+            frame.contentWindow.postMessage({ type: 'dcorner-scroll', y: window.scrollY, h: window.innerHeight, bar: true }, '*');
           } catch (e) {}
         });
       }, { passive: true });
