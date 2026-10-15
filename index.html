@@ -205,13 +205,28 @@
           var o = document.getElementById('pbOrig'); o.hidden = !v.original; o.textContent = v.original || '';
         }
         pbar.classList.toggle('show', !!show);
+        dbgUpdate();
       }
       pbar.addEventListener('click', function () {
         try { frame.contentWindow.postMessage({ type: 'dcorner-pricebar-click' }, '*'); } catch (e) {}
       });
 
+      // Add ?debug=1 to the page address to see a small live status box.
+      var dbgOn = /[?&]debug=1/.test(location.search), dbgCount = {}, dbgBox = null;
+      if (dbgOn) {
+        dbgBox = document.createElement('pre');
+        dbgBox.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;margin:0;padding:4px 6px;background:rgba(0,0,0,.8);color:#7CFC00;font:10px/1.3 monospace;white-space:pre-wrap;pointer-events:none';
+        document.body.appendChild(dbgBox);
+      }
+      function dbgUpdate(type) {
+        if (!dbgOn) return;
+        if (type) dbgCount[type] = (dbgCount[type] || 0) + 1;
+        dbgBox.textContent = 'wrapper v3 | msgs ' + JSON.stringify(dbgCount) + '\ny=' + Math.round(window.scrollY) + ' h=' + window.innerHeight +
+          ' | bar active=' + pb.active + ' start=' + pb.startY + ' end=' + pb.endY + ' show=' + pbar.classList.contains('show');
+      }
       window.addEventListener('message', function (e) {
         if (!e.data || typeof e.data !== 'object') return;
+        if (e.data.type) setTimeout(function () { dbgUpdate(e.data.type); }, 0);
         if (e.data.type === 'dcorner-hello') { sendViewport(); }
         if (e.data.type === 'dcorner-pricebar') {
           pb.active = !!e.data.active;
