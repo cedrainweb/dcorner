@@ -80,6 +80,23 @@
     #pbar .r b { font-size: 15.5px; }
     #pbar [hidden] { display: none; }
     @media (min-width: 1000px) { #pbar { display: none !important; } }
+
+    #offBar { position: fixed; top: 0; left: 0; right: 0; z-index: 2147483200; display: none; padding: 8px 12px; text-align: center; font: 700 13px/1.3 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #fff; background: #b91c1c; }
+    #offBar.show { display: block; }
+    /* Offline screen — shown instead of the browser's "No internet" page. */
+    #offScreen {
+      position: fixed; inset: 0; z-index: 2147483500; display: none;
+      align-items: center; justify-content: center; padding: 24px; text-align: center;
+      background: #0b1224; color: #fff;
+      font: 16px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+    #offScreen.show { display: flex; }
+    #offScreen .box { max-width: 380px; }
+    #offScreen .ic { font-size: 56px; margin-bottom: 10px; }
+    #offScreen h2 { margin: 0 0 8px; font-size: 22px; }
+    #offScreen p { margin: 0 0 18px; color: #b8c6e6; font-size: 15px; }
+    #offScreen button { background: #58cc02; color: #06240a; border: 0; border-radius: 999px; padding: 12px 26px; font: 800 15px/1 inherit; cursor: pointer; }
+    #offScreen .st { margin-top: 14px; font-size: 13px; color: #7f90b8; }
   </style>
 </head>
 
@@ -174,6 +191,17 @@
       allow="fullscreen"
       loading="eager">
     </iframe>
+  </div>
+
+  <div id="offBar">📡 You're offline — reconnecting automatically when your internet is back.</div>
+  <div id="offScreen" role="alert" aria-live="polite">
+    <div class="box">
+      <div class="ic">📡</div>
+      <h2>You're offline</h2>
+      <p>We can't reach D'Corner Pickleball Court right now. This page will reconnect and load automatically as soon as your internet is back — no need to refresh.</p>
+      <button type="button" id="offRetry">Try again</button>
+      <div class="st" id="offStatus">Waiting for connection…</div>
+    </div>
   </div>
 
   <button id="pbar" type="button" aria-label="View booking summary">
@@ -290,6 +318,72 @@
           } catch (e) {}
         });
       }, { passive: true });
+    })();
+  </script>
+
+
+  <script>
+    // Offline support: cache the page shell, show a friendly offline screen,
+    // and reload the booking app by itself once the connection returns.
+    (function () {
+      if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+        window.addEventListener('load', function () {
+          try { navigator.serviceWorker.register('sw.js').catch(function () {}); } catch (e) {}
+        });
+      }
+
+      var frame = document.getElementById('dcFrame');
+      var screen = document.getElementById('offScreen');
+      var status = document.getElementById('offStatus');
+      var appLoaded = false;      // becomes true once the app talks to this page
+      var reloads = 0;
+      var watchdog = null;
+      var FRAME_URL = frame.getAttribute('src');
+
+      function isOnline() { return navigator.onLine !== false; }
+      function show(msg) { screen.classList.add('show'); if (msg) status.textContent = msg; }
+      function hide() { screen.classList.remove('show'); }
+
+      function reloadApp() {
+        if (appLoaded) return;
+        reloads++;
+        status.textContent = 'Reconnecting…';
+        frame.setAttribute('src', FRAME_URL);
+        armWatchdog();
+      }
+      // If the app has not reported in a while, the frame most likely failed.
+      function armWatchdog() {
+        clearTimeout(watchdog);
+        watchdog = setTimeout(function () {
+          if (appLoaded) return;
+          if (!isOnline()) { show('Waiting for connection…'); return; }
+          if (reloads < 3) { reloadApp(); }
+          else { show('Still can\'t load. Check your connection, then tap Try again.'); }
+        }, 15000);
+      }
+
+      window.addEventListener('message', function (e) {
+        if (!e.data || typeof e.data !== 'object' || !e.data.type) return;
+        if (String(e.data.type).indexOf('dcorner-') !== 0) return;
+        appLoaded = true; reloads = 0; clearTimeout(watchdog); hide();
+        if (e.data.type === 'dcorner-connection') document.getElementById('offBar').classList.toggle('show', e.data.online === false);
+      });
+
+      window.addEventListener('offline', function () {
+        // An app that is already open keeps working from memory (and shows its
+        // own offline banner). Only block the screen if it never finished loading.
+        if (!appLoaded) show('Waiting for connection…');
+      });
+      window.addEventListener('online', function () {
+        if (!appLoaded) { hide(); reloads = 0; reloadApp(); }
+      });
+      document.getElementById('offRetry').addEventListener('click', function () {
+        reloads = 0; status.textContent = 'Checking connection…';
+        if (isOnline()) { hide(); reloadApp(); } else { show('Still offline — waiting for connection…'); }
+      });
+
+      if (!isOnline()) show('Waiting for connection…');
+      armWatchdog();
     })();
   </script>
 
